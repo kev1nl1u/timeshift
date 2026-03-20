@@ -46,6 +46,34 @@ class WorkSession(Base):
     client = relationship("Client", back_populates="sessions")
 
 
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    icon = Column(String, default="💳")
+    color = Column(String, default="#6366F1")
+    initial_balance = Column(Float, default=0.0)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Transaction(Base):
+    __tablename__ = "transactions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    type = Column(String, nullable=False)           # expense, income, transfer
+    amount = Column(Float, nullable=False)
+    date = Column(String, nullable=False)            # YYYY-MM-DD
+    category = Column(String, default="")
+    description = Column(Text, default="")
+    account_id = Column(Integer, ForeignKey("accounts.id"), nullable=False)
+    to_account_id = Column(Integer, ForeignKey("accounts.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    account = relationship("Account", foreign_keys=[account_id])
+    to_account = relationship("Account", foreign_keys=[to_account_id])
+
+
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(title="TimeShift API")
@@ -118,6 +146,71 @@ class WorkSessionOut(BaseModel):
     hours: float
     note: str
     client: ClientOut
+
+    model_config = {"from_attributes": True}
+
+
+# ── Account schemas ──────────────────────────────────────────────────────────
+
+class AccountCreate(BaseModel):
+    name: str
+    icon: str = "💳"
+    color: str = "#6366F1"
+    initial_balance: float = 0.0
+
+
+class AccountUpdate(BaseModel):
+    name: Optional[str] = None
+    icon: Optional[str] = None
+    color: Optional[str] = None
+    initial_balance: Optional[float] = None
+
+
+class AccountOut(BaseModel):
+    id: int
+    name: str
+    icon: str
+    color: str
+    initial_balance: float
+    created_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+# ── Transaction schemas ──────────────────────────────────────────────────────
+
+class TransactionCreate(BaseModel):
+    type: str                        # expense, income, transfer
+    amount: float
+    date: str
+    category: str = ""
+    description: str = ""
+    account_id: int
+    to_account_id: Optional[int] = None
+
+
+class TransactionUpdate(BaseModel):
+    type: Optional[str] = None
+    amount: Optional[float] = None
+    date: Optional[str] = None
+    category: Optional[str] = None
+    description: Optional[str] = None
+    account_id: Optional[int] = None
+    to_account_id: Optional[int] = None
+
+
+class TransactionOut(BaseModel):
+    id: int
+    type: str
+    amount: float
+    date: str
+    category: str
+    description: str
+    account_id: int
+    to_account_id: Optional[int]
+    account: AccountOut
+    to_account: Optional[AccountOut]
+    created_at: datetime
 
     model_config = {"from_attributes": True}
 
@@ -222,6 +315,315 @@ def delete_session(session_id: int, db: Session = Depends(get_db)):
     db.commit()
 
 
+# ── Account endpoints ────────────────────────────────────────────────────────
+
+@app.get("/accounts", response_model=List[AccountOut])
+def list_accounts(db: Session = Depends(get_db)):
+    return db.query(Account).order_by(Account.created_at).all()
+
+
+@app.post("/accounts", response_model=AccountOut, status_code=201)
+def create_account(data: AccountCreate, db: Session = Depends(get_db)):
+    account = Account(**data.model_dump())
+    db.add(account)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@app.put("/accounts/{account_id}", response_model=AccountOut)
+def update_account(account_id: int, data: AccountUpdate, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Conto non trovato")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(account, k, v)
+    db.commit()
+    db.refresh(account)
+    return account
+
+
+@app.delete("/accounts/{account_id}", status_code=204)
+def delete_account(account_id: int, db: Session = Depends(get_db)):
+    account = db.query(Account).filter(Account.id == account_id).first()
+    if not account:
+        raise HTTPException(status_code=404, detail="Conto non trovato")
+    # Check for transactions
+    tx_count = db.query(Transaction).filter(
+        (Transaction.account_id == account_id) | (Transaction.to_account_id == account_id)
+    ).count()
+    if tx_count > 0:
+        db.query(Transaction).filter(
+            (Transaction.account_id == account_id) | (Transaction.to_account_id == account_id)
+        ).delete(synchronize_session=False)
+    db.delete(account)
+    db.commit()
+
+
+# ── Transaction endpoints ────────────────────────────────────────────────────
+
+@app.get("/transactions", response_model=List[TransactionOut])
+def list_transactions(db: Session = Depends(get_db)):
+    return db.query(Transaction).order_by(Transaction.date.desc(), Transaction.id.desc()).all()
+
+
+@app.post("/transactions", response_model=TransactionOut, status_code=201)
+def create_transaction(data: TransactionCreate, db: Session = Depends(get_db)):
+    if data.type not in ("expense", "income", "transfer"):
+        raise HTTPException(status_code=422, detail="Tipo deve essere: expense, income, transfer")
+    if data.type == "transfer" and not data.to_account_id:
+        raise HTTPException(status_code=422, detail="Seleziona il conto di destinazione")
+    if data.type == "transfer" and data.account_id == data.to_account_id:
+        raise HTTPException(status_code=422, detail="Il conto di origine e destinazione devono essere diversi")
+    tx = Transaction(**data.model_dump())
+    db.add(tx)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+@app.put("/transactions/{tx_id}", response_model=TransactionOut)
+def update_transaction(tx_id: int, data: TransactionUpdate, db: Session = Depends(get_db)):
+    tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Movimento non trovato")
+    for k, v in data.model_dump(exclude_unset=True).items():
+        setattr(tx, k, v)
+    db.commit()
+    db.refresh(tx)
+    return tx
+
+
+@app.delete("/transactions/{tx_id}", status_code=204)
+def delete_transaction(tx_id: int, db: Session = Depends(get_db)):
+    tx = db.query(Transaction).filter(Transaction.id == tx_id).first()
+    if not tx:
+        raise HTTPException(status_code=404, detail="Movimento non trovato")
+    db.delete(tx)
+    db.commit()
+
+
+# ── Finance stats endpoint ───────────────────────────────────────────────────
+
+@app.get("/finance-stats")
+def get_finance_stats(db: Session = Depends(get_db)):
+    accounts = db.query(Account).all()
+    transactions = db.query(Transaction).all()
+
+    account_balances = []
+    total_balance = 0.0
+    total_income = 0.0
+    total_expenses = 0.0
+
+    for acc in accounts:
+        balance = acc.initial_balance
+        for tx in transactions:
+            if tx.type == "income" and tx.account_id == acc.id:
+                balance += tx.amount
+            elif tx.type == "expense" and tx.account_id == acc.id:
+                balance -= tx.amount
+            elif tx.type == "transfer":
+                if tx.account_id == acc.id:
+                    balance -= tx.amount
+                elif tx.to_account_id == acc.id:
+                    balance += tx.amount
+        total_balance += balance
+        account_balances.append({
+            "account_id": acc.id,
+            "account_name": acc.name,
+            "account_icon": acc.icon,
+            "account_color": acc.color,
+            "balance": round(balance, 2),
+        })
+
+    for tx in transactions:
+        if tx.type == "income":
+            total_income += tx.amount
+        elif tx.type == "expense":
+            total_expenses += tx.amount
+
+    # Expenses by category
+    by_category = {}
+    for tx in transactions:
+        if tx.type == "expense":
+            cat = tx.category or "Altro"
+            by_category[cat] = by_category.get(cat, 0) + tx.amount
+    expenses_by_category = [{"category": k, "amount": round(v, 2)} for k, v in sorted(by_category.items(), key=lambda x: -x[1])]
+
+    # Account balance history over time
+    account_history = []
+    if accounts and transactions:
+        sorted_txs = sorted(transactions, key=lambda t: t.date)
+        # Collect all unique dates
+        all_dates = sorted(set(t.date for t in sorted_txs))
+        for acc in accounts:
+            running = acc.initial_balance
+            points = [{"date": all_dates[0], "balance": round(running, 2)}] if all_dates else []
+            # Pre-group transactions by date for this account
+            for d in all_dates:
+                for tx in sorted_txs:
+                    if tx.date != d:
+                        continue
+                    if tx.type == "income" and tx.account_id == acc.id:
+                        running += tx.amount
+                    elif tx.type == "expense" and tx.account_id == acc.id:
+                        running -= tx.amount
+                    elif tx.type == "transfer":
+                        if tx.account_id == acc.id:
+                            running -= tx.amount
+                        elif tx.to_account_id == acc.id:
+                            running += tx.amount
+                points.append({"date": d, "balance": round(running, 2)})
+            account_history.append({
+                "account_id": acc.id,
+                "account_name": acc.name,
+                "account_color": acc.color,
+                "points": points,
+            })
+
+    return {
+        "account_balances": account_balances,
+        "total_balance": round(total_balance, 2),
+        "total_income": round(total_income, 2),
+        "total_expenses": round(total_expenses, 2),
+        "expenses_by_category": expenses_by_category,
+        "account_history": account_history,
+    }
+
+
+# ── AI operator context endpoint ─────────────────────────────────────────────
+
+@app.get("/ai-context")
+def get_ai_context(db: Session = Depends(get_db)):
+    """Returns everything an AI operator needs to build valid transaction JSON."""
+    accs = db.query(Account).order_by(Account.id).all()
+    return {
+        "accounts": [
+            {"id": a.id, "name": a.name}
+            for a in accs
+        ],
+        "expense_categories": [
+            "Cibo", "Trasporti", "Casa", "Abbigliamento", "Svago",
+            "Salute", "Bollette", "Spesa", "Ristorante", "Regali", "Altro",
+        ],
+        "income_categories": [
+            "Stipendio", "Freelance", "Regalo", "Rimborso", "Investimenti", "Altro",
+        ],
+        "transaction_schema": {
+            "description": "Array di oggetti transazione da inviare via POST a /api/transactions/bulk",
+            "items": {
+                "type": {
+                    "type": "string",
+                    "enum": ["expense", "income", "transfer"],
+                    "required": True,
+                },
+                "amount": {
+                    "type": "number",
+                    "description": "Importo positivo in euro (es. 12.50)",
+                    "required": True,
+                },
+                "date": {
+                    "type": "string",
+                    "format": "YYYY-MM-DD",
+                    "description": "Data del movimento (es. 2026-03-21)",
+                    "required": True,
+                },
+                "account_id": {
+                    "type": "integer",
+                    "description": "ID del conto (vedi lista accounts)",
+                    "required": True,
+                },
+                "to_account_id": {
+                    "type": "integer | null",
+                    "description": "Solo per type=transfer: ID del conto di destinazione",
+                    "required": False,
+                },
+                "category": {
+                    "type": "string",
+                    "description": "Categoria (vedi expense_categories o income_categories). Vuoto per transfer.",
+                    "required": False,
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Descrizione libera del movimento",
+                    "required": False,
+                },
+            },
+        },
+        "example": [
+            {
+                "type": "expense",
+                "amount": 45.00,
+                "date": "2026-03-21",
+                "account_id": accs[0].id if accs else 1,
+                "category": "Spesa",
+                "description": "Spesa settimanale al supermercato",
+            },
+            {
+                "type": "income",
+                "amount": 1500.00,
+                "date": "2026-03-01",
+                "account_id": accs[0].id if accs else 1,
+                "category": "Stipendio",
+                "description": "Stipendio Marzo",
+            },
+            {
+                "type": "transfer",
+                "amount": 200.00,
+                "date": "2026-03-15",
+                "account_id": accs[0].id if accs else 1,
+                "to_account_id": accs[1].id if len(accs) > 1 else 2,
+                "category": "",
+                "description": "Ricarica contanti",
+            },
+        ],
+        "bulk_endpoint": {
+            "method": "POST",
+            "path": "/api/transactions/bulk",
+            "body": {
+                "transactions": "[ ...array di oggetti come da schema sopra... ]"
+            },
+            "description": "Invia un array di transazioni. Restituisce il conteggio degli inserimenti.",
+        },
+    }
+
+
+# ── Bulk transactions endpoint ───────────────────────────────────────────────
+
+class BulkTransactionsPayload(BaseModel):
+    transactions: List[TransactionCreate]
+
+
+@app.post("/transactions/bulk")
+def bulk_create_transactions(payload: BulkTransactionsPayload, db: Session = Depends(get_db)):
+    created = 0
+    errors = []
+    for i, data in enumerate(payload.transactions):
+        if data.type not in ("expense", "income", "transfer"):
+            errors.append(f"[{i}] Tipo non valido: {data.type}")
+            continue
+        if data.type == "transfer" and not data.to_account_id:
+            errors.append(f"[{i}] Manca to_account_id per transfer")
+            continue
+        if data.type == "transfer" and data.account_id == data.to_account_id:
+            errors.append(f"[{i}] account_id e to_account_id devono essere diversi")
+            continue
+        acc = db.query(Account).filter(Account.id == data.account_id).first()
+        if not acc:
+            errors.append(f"[{i}] account_id {data.account_id} non trovato")
+            continue
+        if data.to_account_id:
+            to_acc = db.query(Account).filter(Account.id == data.to_account_id).first()
+            if not to_acc:
+                errors.append(f"[{i}] to_account_id {data.to_account_id} non trovato")
+                continue
+        tx = Transaction(**data.model_dump())
+        db.add(tx)
+        created += 1
+    db.commit()
+    return {"created": created, "errors": errors}
+
+
 # ── Stats endpoint ────────────────────────────────────────────────────────────
 
 @app.get("/stats")
@@ -279,11 +681,38 @@ def export_data(db: Session = Depends(get_db)):
             "created_at": s.created_at.isoformat() if s.created_at else None,
         })
 
+    accounts_data = []
+    for a in db.query(Account).order_by(Account.id).all():
+        accounts_data.append({
+            "id": a.id,
+            "name": a.name,
+            "icon": a.icon,
+            "color": a.color,
+            "initial_balance": a.initial_balance,
+            "created_at": a.created_at.isoformat() if a.created_at else None,
+        })
+
+    transactions_data = []
+    for t in db.query(Transaction).order_by(Transaction.id).all():
+        transactions_data.append({
+            "id": t.id,
+            "type": t.type,
+            "amount": t.amount,
+            "date": t.date,
+            "category": t.category,
+            "description": t.description,
+            "account_id": t.account_id,
+            "to_account_id": t.to_account_id,
+            "created_at": t.created_at.isoformat() if t.created_at else None,
+        })
+
     return {
-        "version": 1,
+        "version": 2,
         "exported_at": datetime.utcnow().isoformat(),
         "clients": clients_data,
         "sessions": sessions_data,
+        "accounts": accounts_data,
+        "transactions": transactions_data,
     }
 
 
@@ -291,11 +720,15 @@ class ImportPayload(BaseModel):
     version: int = 1
     clients: List[dict]
     sessions: List[dict]
+    accounts: List[dict] = []
+    transactions: List[dict] = []
 
 
 @app.post("/import")
 def import_data(payload: ImportPayload, db: Session = Depends(get_db)):
-    # Clear existing data (sessions first due to FK)
+    # Clear existing data (children first due to FK)
+    db.query(Transaction).delete()
+    db.query(Account).delete()
     db.query(WorkSession).delete()
     db.query(Client).delete()
     db.commit()
@@ -320,7 +753,7 @@ def import_data(payload: ImportPayload, db: Session = Depends(get_db)):
     for s in payload.sessions:
         new_client_id = id_map.get(s["client_id"])
         if new_client_id is None:
-            continue  # skip orphan sessions
+            continue
         session = WorkSession(
             client_id=new_client_id,
             date=s["date"],
@@ -336,5 +769,49 @@ def import_data(payload: ImportPayload, db: Session = Depends(get_db)):
                 pass
         db.add(session)
 
+    # Import accounts
+    acc_map = {}
+    for a in payload.accounts:
+        account = Account(
+            name=a["name"],
+            icon=a.get("icon", "💳"),
+            color=a.get("color", "#6366F1"),
+            initial_balance=a.get("initial_balance", 0),
+        )
+        if a.get("created_at"):
+            try:
+                account.created_at = datetime.fromisoformat(a["created_at"])
+            except (ValueError, TypeError):
+                pass
+        db.add(account)
+        db.flush()
+        acc_map[a["id"]] = account.id
+
+    for t in payload.transactions:
+        new_acc_id = acc_map.get(t["account_id"])
+        if new_acc_id is None:
+            continue
+        new_to_acc_id = acc_map.get(t.get("to_account_id")) if t.get("to_account_id") else None
+        tx = Transaction(
+            type=t["type"],
+            amount=t["amount"],
+            date=t["date"],
+            category=t.get("category", ""),
+            description=t.get("description", ""),
+            account_id=new_acc_id,
+            to_account_id=new_to_acc_id,
+        )
+        if t.get("created_at"):
+            try:
+                tx.created_at = datetime.fromisoformat(t["created_at"])
+            except (ValueError, TypeError):
+                pass
+        db.add(tx)
+
     db.commit()
-    return {"imported_clients": len(id_map), "imported_sessions": len(payload.sessions)}
+    return {
+        "imported_clients": len(id_map),
+        "imported_sessions": len(payload.sessions),
+        "imported_accounts": len(acc_map),
+        "imported_transactions": len(payload.transactions),
+    }
