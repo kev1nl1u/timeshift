@@ -1,0 +1,870 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TimeShift — Gestione Ore</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+  <style>
+    * { font-family: 'Inter', sans-serif; }
+    ::-webkit-scrollbar { width: 5px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #94a3b8; border-radius: 4px; }
+    .nav-btn { transition: background 0.15s, color 0.15s; }
+    .nav-btn.active { background: #4F46E5 !important; color: #fff !important; }
+    .cal-cell { min-height: 96px; }
+    .chip { font-size: 0.68rem; line-height: 1.2; }
+    input[type="date"]::-webkit-calendar-picker-indicator,
+    input[type="time"]::-webkit-calendar-picker-indicator { cursor: pointer; opacity: 0.6; }
+  </style>
+</head>
+<body class="bg-slate-100">
+
+<!-- ═══════════════════════════════ SIDEBAR ═══════════════════════════════ -->
+<aside class="fixed top-0 left-0 h-full w-60 bg-slate-900 flex flex-col z-30 shadow-xl">
+  <div class="px-6 py-7 border-b border-slate-700/60">
+    <div class="flex items-center gap-3">
+      <div class="w-9 h-9 bg-indigo-500 rounded-xl flex items-center justify-center text-white font-bold text-lg">T</div>
+      <div>
+        <h1 class="text-white font-bold text-base leading-tight">TimeShift</h1>
+        <p class="text-slate-400 text-xs">Gestione Ore & Clienti</p>
+      </div>
+    </div>
+  </div>
+
+  <nav class="flex-1 px-3 py-4 space-y-1">
+    <button onclick="navigate('dashboard')" id="nav-dashboard"
+      class="nav-btn w-full text-left px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 flex items-center gap-3 text-sm font-medium">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+      Dashboard
+    </button>
+    <button onclick="navigate('calendar')" id="nav-calendar"
+      class="nav-btn w-full text-left px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 flex items-center gap-3 text-sm font-medium">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+      Calendario
+    </button>
+    <button onclick="navigate('clients')" id="nav-clients"
+      class="nav-btn w-full text-left px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 flex items-center gap-3 text-sm font-medium">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+      Clienti
+    </button>
+    <button onclick="navigate('sessions')" id="nav-sessions"
+      class="nav-btn w-full text-left px-4 py-2.5 rounded-xl text-slate-300 hover:bg-slate-800 flex items-center gap-3 text-sm font-medium">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Sessioni
+    </button>
+  </nav>
+
+  <div class="px-3 py-3 border-t border-slate-700/60 space-y-1">
+    <button onclick="exportData()"
+      class="nav-btn w-full text-left px-4 py-2 rounded-xl text-slate-400 hover:bg-slate-800 flex items-center gap-3 text-xs font-medium">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+      Esporta Dati
+    </button>
+    <button onclick="document.getElementById('import-file').click()"
+      class="nav-btn w-full text-left px-4 py-2 rounded-xl text-slate-400 hover:bg-slate-800 flex items-center gap-3 text-xs font-medium">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
+      Importa Dati
+    </button>
+    <input type="file" id="import-file" accept=".json" class="hidden" onchange="importData(event)" />
+    <p class="text-slate-500 text-xs text-center pt-1">TimeShift v1.0</p>
+  </div>
+</aside>
+
+<!-- ═══════════════════════════════ CONTENT ═══════════════════════════════ -->
+<main class="ml-60 min-h-screen">
+  <!-- Loading overlay -->
+  <div id="loading" class="fixed inset-0 ml-60 bg-slate-100 z-20 flex items-center justify-center">
+    <div class="text-center">
+      <div class="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+      <p class="text-slate-500 text-sm">Caricamento...</p>
+    </div>
+  </div>
+  <div id="content" class="p-8"></div>
+</main>
+
+<!-- ═══════════════════════════════ MODAL ═════════════════════════════════ -->
+<div id="modal-overlay" class="hidden fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
+  <div id="modal-box" class="bg-white rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════ TOAST ═════════════════════════════════ -->
+<div id="toast" class="hidden fixed bottom-6 right-6 px-5 py-3 rounded-xl text-white text-sm font-medium z-50 shadow-xl flex items-center gap-2"></div>
+
+<!-- ═══════════════════════════════ SCRIPTS ════════════════════════════════ -->
+<script>
+// ─── Config ───────────────────────────────────────────────────────────────────
+const API = '/api';
+
+const PALETTE = [
+  '#6366F1','#EC4899','#10B981','#F59E0B',
+  '#EF4444','#3B82F6','#8B5CF6','#14B8A6',
+  '#F97316','#06B6D4','#84CC16','#A855F7'
+];
+
+const MONTHS_IT = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+                   'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let clients  = [];
+let sessions = [];
+let stats    = null;
+let calDate  = new Date();
+let view     = 'dashboard';
+let charts   = {};
+
+// ─── Utilities ────────────────────────────────────────────────────────────────
+const euro = n => new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR'}).format(n||0);
+
+function fmtHours(h) {
+  const hrs  = Math.floor(h||0);
+  const mins = Math.round(((h||0) - hrs) * 60);
+  return mins === 0 ? `${hrs}h` : `${hrs}h ${mins}m`;
+}
+
+function fmtDate(s) {
+  if (!s) return '';
+  const [y,m,d] = s.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function calcHours(start, end) {
+  if (!start || !end) return 0;
+  const [sh,sm] = start.split(':').map(Number);
+  const [eh,em] = end.split(':').map(Number);
+  let mins = (eh*60+em)-(sh*60+sm);
+  if (mins < 0) mins += 1440;
+  return Math.round(mins/60*100)/100;
+}
+
+function ym(date) {
+  return `${date.getFullYear()}-${String(date.getMonth()+1).padStart(2,'0')}`;
+}
+
+function clientById(id) { return clients.find(c => c.id === id) || null; }
+
+function destroyChart(key) {
+  if (charts[key]) { charts[key].destroy(); delete charts[key]; }
+}
+
+function toast(msg, err=false) {
+  const el = document.getElementById('toast');
+  el.innerHTML = `<span>${err?'✕':'✓'}</span> ${msg}`;
+  el.className = `fixed bottom-6 right-6 px-5 py-3 rounded-xl text-white text-sm font-medium z-50 shadow-xl flex items-center gap-2 ${err?'bg-red-500':'bg-emerald-500'}`;
+  el.classList.remove('hidden');
+  clearTimeout(el._t);
+  el._t = setTimeout(()=>el.classList.add('hidden'), 3000);
+}
+
+// ─── API ──────────────────────────────────────────────────────────────────────
+async function req(method, path, body=null) {
+  const opts = { method, headers: {'Content-Type':'application/json'} };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch(`${API}${path}`, opts);
+  if (res.status === 204) return null;
+  const data = await res.json().catch(()=>({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+async function reload() {
+  [clients, sessions, stats] = await Promise.all([
+    req('GET','/clients'),
+    req('GET','/sessions'),
+    req('GET','/stats'),
+  ]);
+}
+
+// ─── Navigation ───────────────────────────────────────────────────────────────
+function navigate(v) {
+  view = v;
+  document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById(`nav-${v}`)?.classList.add('active');
+  Object.keys(charts).forEach(k => destroyChart(k));
+  const c = document.getElementById('content');
+  switch(v) {
+    case 'dashboard': renderDashboard(c); break;
+    case 'calendar':  renderCalendar(c);  break;
+    case 'clients':   renderClients(c);   break;
+    case 'sessions':  renderSessions(c);  break;
+  }
+}
+
+// ─── Dashboard ────────────────────────────────────────────────────────────────
+function renderDashboard(el) {
+  const now  = new Date();
+  const ymNow = ym(now);
+  const monthSessions = sessions.filter(s => s.date.startsWith(ymNow));
+  const monthEarnings = monthSessions.reduce((a,s) => {
+    const c = clientById(s.client_id);
+    return a + (c ? s.hours * c.hourly_rate : 0);
+  }, 0);
+
+  // Monthly data (last 6 months)
+  const monthly = Array.from({length:6},(_,i) => {
+    const d = new Date(now.getFullYear(), now.getMonth()-5+i, 1);
+    const m = ym(d);
+    const ss = sessions.filter(s => s.date.startsWith(m));
+    const earn = ss.reduce((a,s) => {
+      const c = clientById(s.client_id);
+      return a + (c ? s.hours * c.hourly_rate : 0);
+    }, 0);
+    return { label: MONTHS_IT[d.getMonth()].slice(0,3), value: Math.round(earn*100)/100 };
+  });
+
+  const recent = [...sessions].slice(0,8);
+
+  el.innerHTML = `
+    <div class="mb-8">
+      <h2 class="text-2xl font-bold text-slate-800">Dashboard</h2>
+      <p class="text-slate-500 mt-1">${MONTHS_IT[now.getMonth()]} ${now.getFullYear()}</p>
+    </div>
+
+    <div class="grid grid-cols-2 xl:grid-cols-4 gap-5 mb-8">
+      ${kpi('Ore Totali',  fmtHours(stats?.total_hours||0),  'text-blue-600',   'bg-blue-50',   'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z')}
+      ${kpi('Guadagno Totale', euro(stats?.total_earnings||0), 'text-emerald-600','bg-emerald-50','M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z')}
+      ${kpi('Clienti',     clients.length,                    'text-violet-600', 'bg-violet-50', 'M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z')}
+      ${kpi('Questo Mese', euro(monthEarnings),               'text-amber-600',  'bg-amber-50',  'M13 7h8m0 0v8m0-8l-8 8-4-4-6 6')}
+    </div>
+
+    <div class="grid grid-cols-1 xl:grid-cols-2 gap-6 mb-6">
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <h3 class="font-semibold text-slate-700 mb-5">Guadagni per Cliente</h3>
+        ${stats?.by_client?.length
+          ? `<div class="flex justify-center"><canvas id="ch-pie" width="260" height="260"></canvas></div>`
+          : `<div class="h-44 flex items-center justify-center text-slate-400 text-sm">Nessun dato</div>`}
+      </div>
+      <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+        <h3 class="font-semibold text-slate-700 mb-5">Guadagni Ultimi 6 Mesi</h3>
+        <canvas id="ch-bar" height="230"></canvas>
+      </div>
+    </div>
+
+    ${stats?.by_client?.length ? `
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6 mb-6">
+      <h3 class="font-semibold text-slate-700 mb-5">Riepilogo per Cliente</h3>
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead>
+            <tr class="border-b border-slate-100">
+              <th class="text-left py-2 px-3 text-slate-400 font-medium">Cliente</th>
+              <th class="text-right py-2 px-3 text-slate-400 font-medium">Tariffa</th>
+              <th class="text-right py-2 px-3 text-slate-400 font-medium">Ore Tot.</th>
+              <th class="text-right py-2 px-3 text-slate-400 font-medium">Guadagno</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${stats.by_client.map(c=>`
+            <tr class="border-b border-slate-50 hover:bg-slate-50">
+              <td class="py-2.5 px-3">
+                <div class="flex items-center gap-2">
+                  <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background:${c.client_color}"></span>
+                  <span class="font-medium text-slate-700">${c.client_name}</span>
+                </div>
+              </td>
+              <td class="py-2.5 px-3 text-right text-slate-500">${euro(c.hourly_rate)}/h</td>
+              <td class="py-2.5 px-3 text-right text-slate-600">${fmtHours(c.total_hours)}</td>
+              <td class="py-2.5 px-3 text-right font-semibold text-emerald-600">${euro(c.total_earnings)}</td>
+            </tr>`).join('')}
+            <tr class="bg-slate-50 font-semibold">
+              <td class="py-2.5 px-3 text-slate-700" colspan="2">Totale</td>
+              <td class="py-2.5 px-3 text-right text-slate-700">${fmtHours(stats.total_hours)}</td>
+              <td class="py-2.5 px-3 text-right text-emerald-600">${euro(stats.total_earnings)}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-6">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-semibold text-slate-700">Ultime Sessioni</h3>
+        <button onclick="navigate('sessions')" class="text-indigo-600 text-sm font-medium hover:text-indigo-700">Vedi tutte →</button>
+      </div>
+      ${recent.length ? `
+      <div class="space-y-1">
+        ${recent.map(s => {
+          const c = clientById(s.client_id);
+          const earn = c ? s.hours * c.hourly_rate : 0;
+          return `<div class="flex items-center gap-3 py-2 px-3 rounded-lg hover:bg-slate-50 text-sm">
+            <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${c?.color||'#94a3b8'}"></span>
+            <span class="text-slate-400 w-20 flex-shrink-0">${fmtDate(s.date)}</span>
+            <span class="font-medium text-slate-700 flex-1 truncate">${c?.name||'N/A'}</span>
+            <span class="text-slate-400">${s.start_time&&s.end_time?s.start_time+' – '+s.end_time:''}</span>
+            <span class="text-slate-600 w-14 text-right">${fmtHours(s.hours)}</span>
+            <span class="font-semibold text-emerald-600 w-20 text-right">${euro(earn)}</span>
+          </div>`;
+        }).join('')}
+      </div>` : `<p class="text-slate-400 text-sm text-center py-6">Nessuna sessione registrata</p>`}
+    </div>
+  `;
+
+  setTimeout(() => {
+    // Doughnut
+    if (stats?.by_client?.length) {
+      const ctx = document.getElementById('ch-pie');
+      if (ctx) {
+        destroyChart('pie');
+        charts['pie'] = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: stats.by_client.map(c=>c.client_name),
+            datasets:[{ data: stats.by_client.map(c=>c.total_earnings),
+              backgroundColor: stats.by_client.map(c=>c.client_color),
+              borderWidth:2, borderColor:'#fff', hoverOffset:5 }]
+          },
+          options: {
+            responsive:false,
+            cutout:'65%',
+            plugins:{
+              legend:{ position:'bottom', labels:{ padding:14, font:{size:11} } },
+              tooltip:{ callbacks:{ label: ctx=>` ${euro(ctx.raw)}` } }
+            }
+          }
+        });
+      }
+    }
+    // Bar
+    const bCtx = document.getElementById('ch-bar');
+    if (bCtx) {
+      destroyChart('bar');
+      charts['bar'] = new Chart(bCtx, {
+        type:'bar',
+        data:{
+          labels: monthly.map(m=>m.label),
+          datasets:[{ label:'€', data: monthly.map(m=>m.value),
+            backgroundColor:'#6366F1', borderRadius:7, borderSkipped:false }]
+        },
+        options:{
+          responsive:true,
+          plugins:{ legend:{display:false}, tooltip:{ callbacks:{ label:ctx=>` ${euro(ctx.raw)}` } } },
+          scales:{
+            y:{ beginAtZero:true, grid:{color:'#f1f5f9'}, ticks:{ callback:v=>`€${v}` } },
+            x:{ grid:{display:false} }
+          }
+        }
+      });
+    }
+  }, 30);
+}
+
+function kpi(label, value, textCls, bgCls, path) {
+  return `<div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 flex items-center gap-4">
+    <div class="w-11 h-11 rounded-xl ${bgCls} flex items-center justify-center flex-shrink-0">
+      <svg class="w-5 h-5 ${textCls}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="${path}"/>
+      </svg>
+    </div>
+    <div>
+      <p class="text-xs text-slate-400">${label}</p>
+      <p class="text-lg font-bold text-slate-800">${value}</p>
+    </div>
+  </div>`;
+}
+
+// ─── Calendar ─────────────────────────────────────────────────────────────────
+function renderCalendar(el) {
+  const year  = calDate.getFullYear();
+  const month = calDate.getMonth();
+  const first = new Date(year, month, 1);
+  const last  = new Date(year, month+1, 0);
+  const today = new Date();
+
+  // Starts on Monday (Italian)
+  let dow = first.getDay(); // 0=Sun
+  if (dow === 0) dow = 7;
+  dow -= 1; // Mon=0
+
+  const ymStr = `${year}-${String(month+1).padStart(2,'0')}`;
+  const byDate = {};
+  sessions.filter(s => s.date.startsWith(ymStr)).forEach(s => {
+    byDate[s.date] = byDate[s.date] || [];
+    byDate[s.date].push(s);
+  });
+
+  const DAY_LABELS = ['Lun','Mar','Mer','Gio','Ven','Sab','Dom'];
+  let cells = '';
+
+  for (let i=0; i<dow; i++) {
+    cells += `<div class="cal-cell bg-slate-50/50 rounded-xl border border-slate-100/60"></div>`;
+  }
+
+  for (let d=1; d<=last.getDate(); d++) {
+    const ds = `${ymStr}-${String(d).padStart(2,'0')}`;
+    const ss = byDate[ds] || [];
+    const isToday = today.getFullYear()===year && today.getMonth()===month && today.getDate()===d;
+    const totalH = ss.reduce((a,s)=>a+s.hours,0);
+
+    const chips = ss.slice(0,3).map(s => {
+      const c = clientById(s.client_id);
+      return `<div class="chip px-1.5 py-0.5 rounded-md text-white cursor-pointer truncate"
+        style="background:${c?.color||'#94a3b8'}"
+        onclick="event.stopPropagation();openSessionModal(${s.id})"
+        title="${c?.name||'N/A'}: ${fmtHours(s.hours)}${s.note?' – '+s.note:''}">
+        ${(c?.name||'').slice(0,8)} ${fmtHours(s.hours)}
+      </div>`;
+    }).join('');
+
+    const more = ss.length>3 ? `<div class="text-xs text-slate-400 px-1">+${ss.length-3} altri</div>`:'';
+
+    cells += `
+      <div class="cal-cell bg-white rounded-xl border ${isToday?'border-indigo-400 ring-2 ring-indigo-100':'border-slate-100'} p-2 cursor-pointer hover:shadow-sm transition-shadow"
+        onclick="openSessionModal(null,'${ds}')">
+        <div class="flex items-center justify-between mb-1">
+          <span class="text-xs font-semibold ${isToday?'w-5 h-5 bg-indigo-500 text-white rounded-full flex items-center justify-center text-center':'text-slate-500'}">${d}</span>
+          ${totalH>0?`<span class="text-xs text-slate-400">${fmtHours(totalH)}</span>`:''}
+        </div>
+        <div class="space-y-0.5">${chips}${more}</div>
+      </div>`;
+  }
+
+  el.innerHTML = `
+    <div class="mb-7 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800">Calendario</h2>
+        <p class="text-slate-500 mt-1 text-sm">Clicca su un giorno per aggiungere una sessione</p>
+      </div>
+      <button onclick="openSessionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
+        + Aggiungi Sessione
+      </button>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+      <div class="flex items-center justify-between mb-5">
+        <button onclick="calNav(-1)" class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 text-lg font-bold">‹</button>
+        <h3 class="font-semibold text-slate-800">${MONTHS_IT[month]} ${year}</h3>
+        <button onclick="calNav(1)"  class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-500 text-lg font-bold">›</button>
+      </div>
+      <div class="grid grid-cols-7 gap-1.5 mb-1.5">
+        ${DAY_LABELS.map(d=>`<div class="text-center text-xs font-semibold text-slate-400 py-1">${d}</div>`).join('')}
+      </div>
+      <div class="grid grid-cols-7 gap-1.5">${cells}</div>
+    </div>
+  `;
+}
+
+function calNav(dir) {
+  calDate = new Date(calDate.getFullYear(), calDate.getMonth()+dir, 1);
+  renderCalendar(document.getElementById('content'));
+}
+
+// ─── Clients view ─────────────────────────────────────────────────────────────
+function renderClients(el) {
+  el.innerHTML = `
+    <div class="mb-7 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800">Clienti</h2>
+        <p class="text-slate-500 mt-1 text-sm">${clients.length} client${clients.length!==1?'i':'e'} registrat${clients.length!==1?'i':'o'}</p>
+      </div>
+      <button onclick="openClientModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
+        + Nuovo Cliente
+      </button>
+    </div>
+
+    ${clients.length===0 ? `
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm p-16 text-center">
+      <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+        <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/>
+        </svg>
+      </div>
+      <p class="text-slate-600 font-medium">Nessun cliente</p>
+      <p class="text-slate-400 text-sm mt-1">Aggiungi il tuo primo cliente per iniziare a tracciare le ore</p>
+      <button onclick="openClientModal()" class="mt-5 bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700">+ Aggiungi Cliente</button>
+    </div>` : `
+    <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+      ${clients.map(c => {
+        const cs = stats?.by_client?.find(s=>s.client_id===c.id);
+        return `
+        <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+          <div class="h-1.5" style="background:${c.color}"></div>
+          <div class="p-5">
+            <div class="flex items-start justify-between mb-4">
+              <div class="flex items-center gap-3">
+                <div class="w-10 h-10 rounded-xl flex items-center justify-center text-white font-bold text-base flex-shrink-0" style="background:${c.color}">
+                  ${c.name.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <h3 class="font-semibold text-slate-800 text-sm">${c.name}</h3>
+                  <p class="text-slate-400 text-xs mt-0.5">${euro(c.hourly_rate)}/ora</p>
+                </div>
+              </div>
+              <div class="flex gap-1">
+                <button onclick="openClientModal(${c.id})"
+                  class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                </button>
+                <button onclick="confirmDeleteClient(${c.id},'${c.name.replace(/'/g,"\\\'")}')"
+                  class="w-8 h-8 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                </button>
+              </div>
+            </div>
+            <div class="grid grid-cols-2 gap-3 pt-4 border-t border-slate-100">
+              <div>
+                <p class="text-xs text-slate-400 mb-0.5">Ore totali</p>
+                <p class="font-semibold text-slate-700 text-sm">${fmtHours(cs?.total_hours||0)}</p>
+              </div>
+              <div>
+                <p class="text-xs text-slate-400 mb-0.5">Guadagni</p>
+                <p class="font-semibold text-emerald-600 text-sm">${euro(cs?.total_earnings||0)}</p>
+              </div>
+            </div>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`}
+  `;
+}
+
+// ─── Sessions view ────────────────────────────────────────────────────────────
+function renderSessions(el) {
+  const sorted = [...sessions]; // already sorted by backend
+
+  el.innerHTML = `
+    <div class="mb-7 flex items-center justify-between">
+      <div>
+        <h2 class="text-2xl font-bold text-slate-800">Sessioni</h2>
+        <p class="text-slate-500 mt-1 text-sm">${sessions.length} sessioni registrate</p>
+      </div>
+      <button onclick="openSessionModal()" class="bg-indigo-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700 transition-colors">
+        + Nuova Sessione
+      </button>
+    </div>
+
+    <div class="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+      ${sorted.length===0 ? `
+      <div class="p-16 text-center">
+        <div class="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+          <svg class="w-8 h-8 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/>
+          </svg>
+        </div>
+        <p class="text-slate-600 font-medium">Nessuna sessione</p>
+        <p class="text-slate-400 text-sm mt-1">Inizia a registrare le tue ore lavorative</p>
+        <button onclick="openSessionModal()" class="mt-5 bg-indigo-600 text-white px-5 py-2 rounded-xl text-sm font-medium hover:bg-indigo-700">+ Aggiungi Sessione</button>
+      </div>` : `
+      <div class="overflow-x-auto">
+        <table class="w-full text-sm">
+          <thead class="bg-slate-50 border-b border-slate-100">
+            <tr>
+              <th class="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Data</th>
+              <th class="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Cliente</th>
+              <th class="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Orario</th>
+              <th class="text-right py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Ore</th>
+              <th class="text-right py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Guadagno</th>
+              <th class="text-left py-3 px-4 text-xs font-semibold text-slate-400 uppercase tracking-wide">Nota</th>
+              <th class="py-3 px-4"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${sorted.map(s => {
+              const c = clientById(s.client_id);
+              const earn = c ? s.hours * c.hourly_rate : 0;
+              return `
+              <tr class="border-b border-slate-50 hover:bg-slate-50/60 transition-colors">
+                <td class="py-3 px-4 text-slate-500">${fmtDate(s.date)}</td>
+                <td class="py-3 px-4">
+                  <div class="flex items-center gap-2">
+                    <span class="w-2 h-2 rounded-full flex-shrink-0" style="background:${c?.color||'#94a3b8'}"></span>
+                    <span class="font-medium text-slate-700">${c?.name||'N/A'}</span>
+                  </div>
+                </td>
+                <td class="py-3 px-4 text-slate-400">
+                  ${s.start_time&&s.end_time ? `${s.start_time} – ${s.end_time}` : '—'}
+                </td>
+                <td class="py-3 px-4 text-right font-medium text-slate-700">${fmtHours(s.hours)}</td>
+                <td class="py-3 px-4 text-right font-semibold text-emerald-600">${euro(earn)}</td>
+                <td class="py-3 px-4 text-slate-400 max-w-xs">
+                  <span class="truncate block max-w-xs" title="${s.note||''}">${s.note||'—'}</span>
+                </td>
+                <td class="py-3 px-4">
+                  <div class="flex gap-1 justify-end">
+                    <button onclick="openSessionModal(${s.id})"
+                      class="w-7 h-7 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400 hover:text-slate-600">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/></svg>
+                    </button>
+                    <button onclick="confirmDeleteSession(${s.id})"
+                      class="w-7 h-7 rounded-lg hover:bg-red-50 flex items-center justify-center text-slate-400 hover:text-red-500">
+                      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                    </button>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`}
+    </div>
+  `;
+}
+
+// ─── Client modal ─────────────────────────────────────────────────────────────
+function openClientModal(clientId = null) {
+  const c = clientId ? clients.find(x => x.id === clientId) : null;
+  const defColor = c?.color || PALETTE[clients.length % PALETTE.length];
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-base font-semibold text-slate-800">${c ? 'Modifica Cliente' : 'Nuovo Cliente'}</h3>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Nome Cliente *</label>
+          <input id="c-name" type="text" value="${c?.name||''}" placeholder="es. Acme S.r.l."
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Tariffa Oraria *</label>
+          <div class="relative">
+            <input id="c-rate" type="number" min="0" step="0.5" value="${c?.hourly_rate||''}" placeholder="25.00"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm pr-12" />
+            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm font-medium">€/h</span>
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-2">Colore</label>
+          <div class="flex gap-2 flex-wrap">
+            ${PALETTE.map(col => `
+            <button type="button" onclick="pickColor('${col}')" data-col="${col}"
+              class="w-7 h-7 rounded-full hover:scale-110 transition-transform ${col===defColor?'ring-2 ring-offset-2 ring-slate-500 scale-110':''}"
+              style="background:${col}"></button>`).join('')}
+          </div>
+          <input type="hidden" id="c-color" value="${defColor}" />
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium">Annulla</button>
+        <button onclick="saveClient(${clientId||'null'})" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium">
+          ${c ? 'Salva Modifiche' : 'Crea Cliente'}
+        </button>
+      </div>
+    </div>
+  `;
+
+  showModal();
+  document.getElementById('c-name').focus();
+}
+
+function pickColor(col) {
+  document.getElementById('c-color').value = col;
+  document.querySelectorAll('[data-col]').forEach(b => {
+    b.classList.remove('ring-2','ring-offset-2','ring-slate-500','scale-110');
+  });
+  document.querySelector(`[data-col="${col}"]`).classList.add('ring-2','ring-offset-2','ring-slate-500','scale-110');
+}
+
+async function saveClient(id) {
+  const name  = document.getElementById('c-name').value.trim();
+  const rate  = parseFloat(document.getElementById('c-rate').value);
+  const color = document.getElementById('c-color').value;
+
+  if (!name)         return toast('Inserisci il nome del cliente', true);
+  if (!rate||rate<=0) return toast('Inserisci una tariffa oraria valida', true);
+
+  try {
+    if (id) {
+      await req('PUT', `/clients/${id}`, { name, hourly_rate: rate, color });
+      toast('Cliente aggiornato!');
+    } else {
+      await req('POST', '/clients', { name, hourly_rate: rate, color });
+      toast('Cliente creato!');
+    }
+    closeModal();
+    await reload();
+    navigate(view);
+  } catch(e) { toast(e.message, true); }
+}
+
+async function confirmDeleteClient(id, name) {
+  if (!confirm(`Eliminare il cliente "${name}"?\nVerranno eliminate anche tutte le sue sessioni.`)) return;
+  try {
+    await req('DELETE', `/clients/${id}`);
+    toast('Cliente eliminato');
+    await reload();
+    navigate(view);
+  } catch(e) { toast(e.message, true); }
+}
+
+// ─── Session modal ────────────────────────────────────────────────────────────
+function openSessionModal(sessionId = null, prefillDate = null) {
+  const s = sessionId ? sessions.find(x => x.id === sessionId) : null;
+  const defaultDate = s?.date || prefillDate || new Date().toISOString().slice(0,10);
+
+  document.getElementById('modal-body').innerHTML = `
+    <div class="p-6">
+      <div class="flex items-center justify-between mb-6">
+        <h3 class="text-base font-semibold text-slate-800">${s ? 'Modifica Sessione' : 'Nuova Sessione'}</h3>
+        <button onclick="closeModal()" class="w-8 h-8 rounded-lg hover:bg-slate-100 flex items-center justify-center text-slate-400">✕</button>
+      </div>
+
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Cliente *</label>
+          <select id="s-client" class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm">
+            <option value="">Seleziona cliente…</option>
+            ${clients.map(c => `<option value="${c.id}" ${s?.client_id===c.id?'selected':''}>${c.name} — ${euro(c.hourly_rate)}/h</option>`).join('')}
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Data *</label>
+          <input id="s-date" type="date" value="${defaultDate}"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm" />
+        </div>
+
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Inizio</label>
+            <input id="s-start" type="time" value="${s?.start_time||''}" oninput="autoHours()"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700 mb-1.5">Fine</label>
+            <input id="s-end" type="time" value="${s?.end_time||''}" oninput="autoHours()"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Ore *</label>
+          <div class="relative">
+            <input id="s-hours" type="number" min="0.25" step="0.25" value="${s?.hours||''}" placeholder="es. 4.5"
+              class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm pr-14" />
+            <span class="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm">ore</span>
+          </div>
+          <p class="text-xs text-slate-400 mt-1">Auto-calcolate da inizio/fine, oppure inserisci manualmente</p>
+        </div>
+
+        <div>
+          <label class="block text-sm font-medium text-slate-700 mb-1.5">Nota</label>
+          <textarea id="s-note" rows="2" placeholder="Descrizione del lavoro svolto…"
+            class="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-300 text-slate-800 text-sm resize-none">${s?.note||''}</textarea>
+        </div>
+      </div>
+
+      <div class="flex gap-3 mt-6">
+        <button onclick="closeModal()" class="flex-1 py-2.5 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 text-sm font-medium">Annulla</button>
+        <button onclick="saveSession(${sessionId||'null'})" class="flex-1 py-2.5 rounded-xl bg-indigo-600 text-white hover:bg-indigo-700 text-sm font-medium">
+          ${s ? 'Salva Modifiche' : 'Aggiungi'}
+        </button>
+      </div>
+    </div>
+  `;
+
+  showModal();
+}
+
+function autoHours() {
+  const start = document.getElementById('s-start').value;
+  const end   = document.getElementById('s-end').value;
+  if (start && end) {
+    const h = calcHours(start, end);
+    if (h > 0) document.getElementById('s-hours').value = h;
+  }
+}
+
+async function saveSession(id) {
+  const clientId = parseInt(document.getElementById('s-client').value);
+  const date     = document.getElementById('s-date').value;
+  const start    = document.getElementById('s-start').value || null;
+  const end      = document.getElementById('s-end').value   || null;
+  const hours    = parseFloat(document.getElementById('s-hours').value);
+  const note     = document.getElementById('s-note').value.trim();
+
+  if (!clientId)    return toast('Seleziona un cliente', true);
+  if (!date)        return toast('Seleziona una data', true);
+  if (!hours||hours<=0) return toast('Inserisci le ore lavorate', true);
+
+  const body = { client_id: clientId, date, start_time: start, end_time: end, hours, note };
+
+  try {
+    if (id) {
+      await req('PUT', `/sessions/${id}`, body);
+      toast('Sessione aggiornata!');
+    } else {
+      await req('POST', '/sessions', body);
+      toast('Sessione aggiunta!');
+    }
+    closeModal();
+    await reload();
+    navigate(view);
+  } catch(e) { toast(e.message, true); }
+}
+
+async function confirmDeleteSession(id) {
+  if (!confirm('Eliminare questa sessione?')) return;
+  try {
+    await req('DELETE', `/sessions/${id}`);
+    toast('Sessione eliminata');
+    await reload();
+    navigate(view);
+  } catch(e) { toast(e.message, true); }
+}
+
+// ─── Modal helpers ────────────────────────────────────────────────────────────
+function showModal() {
+  document.getElementById('modal-overlay').classList.remove('hidden');
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.add('hidden');
+  document.getElementById('modal-body').innerHTML = '';
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+
+// ─── Export / Import ──────────────────────────────────────────────────────────
+async function exportData() {
+  try {
+    const data = await req('GET', '/export');
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement('a');
+    a.href     = url;
+    a.download = `timeshift-backup-${new Date().toISOString().slice(0,10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast('Dati esportati!');
+  } catch(e) { toast('Errore export: ' + e.message, true); }
+}
+
+async function importData(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  if (!confirm('Importare i dati? Tutti i dati attuali verranno sostituiti.')) return;
+
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    await req('POST', '/import', data);
+    toast('Dati importati!');
+    await reload();
+    navigate(view);
+  } catch(e) { toast('Errore import: ' + e.message, true); }
+}
+
+// ─── Boot ─────────────────────────────────────────────────────────────────────
+(async () => {
+  try {
+    await reload();
+  } catch(e) {
+    toast('Impossibile contattare il server: ' + e.message, true);
+  }
+  document.getElementById('loading').style.display = 'none';
+  navigate('dashboard');
+})();
+</script>
+</body>
+</html>
